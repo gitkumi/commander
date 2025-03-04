@@ -40,23 +40,23 @@ func main() {
 	app := tview.NewApplication()
 	pages := tview.NewPages()
 
-	list := tview.NewBox().
+	commandsPage := tview.NewBox().
 		SetBorder(true).
 		SetTitle(" Commander ")
 
-	listWrapper := tview.NewFlex().
+	commandsPageWrapper := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(list, 0, 1, true)
+		AddItem(commandsPage, 0, 1, true)
 
-	pages.AddPage("List", listWrapper, true, true)
+	pages.AddPage("Commands", commandsPageWrapper, true, true)
 
-	output := tview.NewBox().
+	outputPage := tview.NewBox().
 		SetBorder(true).
 		SetTitle(" Output ")
 
 	outputWrapper := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(output, 0, 1, true)
+		AddItem(outputPage, 0, 1, true)
 
 	pages.AddPage("Output", outputWrapper, true, true)
 

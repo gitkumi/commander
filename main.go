@@ -26,50 +26,40 @@ type Command struct {
 	Inputs      []CommandInput `yaml:"inputs"`
 }
 
-func main() {
-	file, err := os.ReadFile("./commander.yaml")
-	if err != nil {
-		log.Fatal(err)
-	}
+type UI struct {
+	app          *tview.Application
+	config       CommanderFile
+	pages        *tview.Pages
+	outputPage   *tview.Flex
+	commandsPage *tview.Flex
+}
 
-	var commanderFile CommanderFile
-	err = yaml.Unmarshal(file, &commanderFile)
-	if err != nil {
-		log.Fatal(err)
-	}
+func (ui *UI) buildOutputContent(cmd Command) {
+	ui.outputPage.Clear()
 
-	app := tview.NewApplication()
-	pages := tview.NewPages()
+	content := tview.NewTextView().
+		SetWrap(true).
+		SetText(cmd.Template)
 
-	commandsPage := tview.NewFlex().
-		SetDirection(tview.FlexRow)
-	pages.AddPage("Commands", commandsPage, true, true)
+	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
+			ui.pages.SwitchToPage("Commands")
+			return nil
+		}
+		return event
+	})
 
-	outputPage := tview.NewFlex().
-		SetDirection(tview.FlexRow)
-	pages.AddPage("Output", outputPage, true, false)
+	ui.outputPage.AddItem(content, 0, 1, true)
+	ui.pages.SwitchToPage("Output")
+}
+
+func (ui *UI) buildCommandPage() {
+	ui.commandsPage = tview.NewFlex().SetDirection(tview.FlexRow)
 
 	commandsList := tview.NewList()
-
-	for _, cmd := range commanderFile.Commands {
+	for _, cmd := range ui.config.Commands {
 		commandsList.AddItem(cmd.Title, "", 0, func() {
-			outputPage.Clear()
-
-			outputPageContent := tview.NewTextView().
-				SetWrap(true).
-				SetText(cmd.Template)
-
-			outputPageContent.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-				if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
-					pages.SwitchToPage("Commands")
-					return nil
-				}
-				return event
-			})
-
-			outputPage.AddItem(outputPageContent, 0, 1, true)
-
-			pages.SwitchToPage("Output")
+			ui.buildOutputContent(cmd)
 		})
 	}
 
@@ -77,14 +67,16 @@ func main() {
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
 			case 'q':
-				app.Stop()
+				ui.app.Stop()
 				return nil
+
 			case 'j':
 				curr := commandsList.GetCurrentItem()
 				if curr < commandsList.GetItemCount()-1 {
 					commandsList.SetCurrentItem(curr + 1)
 				}
 				return nil
+
 			case 'k':
 				curr := commandsList.GetCurrentItem()
 				if curr > 0 {
@@ -96,17 +88,57 @@ func main() {
 		return event
 	})
 
-	commandsPage.AddItem(commandsList, 0, 1, true)
+	ui.commandsPage.AddItem(commandsList, 0, 1, true)
+	ui.commandsPage.SetTitle(" Commands ").SetBorder(true)
 
-	commandsPage.
-		SetTitle(" Commands ").
-		SetBorder(true)
+	ui.pages.AddPage("Commands", ui.commandsPage, true, true)
+}
 
-	outputPage.
-		SetTitle(" Output ").
-		SetBorder(true)
+func (ui *UI) buildOutputPage() {
+	ui.outputPage = tview.NewFlex().SetDirection(tview.FlexRow)
+	ui.outputPage.SetTitle(" Output ").SetBorder(true)
 
-	if err := app.SetRoot(pages, true).SetFocus(pages).Run(); err != nil {
+	ui.pages.AddPage("Output", ui.outputPage, true, false)
+}
+
+func buildUI(app *tview.Application, config CommanderFile) *UI {
+	ui := &UI{
+		app:    app,
+		config: config,
+		pages:  tview.NewPages(),
+	}
+
+	ui.buildOutputPage()
+	ui.buildCommandPage()
+
+	return ui
+}
+
+func main() {
+	config, err := loadConfig("./commander.yaml")
+	if err != nil {
 		log.Fatal(err)
 	}
+
+	app := tview.NewApplication()
+	ui := buildUI(app, config)
+
+	if err := app.SetRoot(ui.pages, true).SetFocus(ui.pages).Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func loadConfig(filePath string) (CommanderFile, error) {
+	file, err := os.ReadFile(filePath)
+	if err != nil {
+		return CommanderFile{}, err
+	}
+
+	var commanderFile CommanderFile
+	err = yaml.Unmarshal(file, &commanderFile)
+	if err != nil {
+		return CommanderFile{}, err
+	}
+
+	return commanderFile, nil
 }

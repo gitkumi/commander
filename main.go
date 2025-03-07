@@ -74,9 +74,24 @@ func main() {
 	}
 
 	commandsList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
-			app.Stop()
-			return nil
+		if event.Key() == tcell.KeyRune {
+			switch event.Rune() {
+			case 'q':
+				app.Stop()
+				return nil
+			case 'j':
+				curr := commandsList.GetCurrentItem()
+				if curr < commandsList.GetItemCount()-1 {
+					commandsList.SetCurrentItem(curr + 1)
+				}
+				return nil
+			case 'k':
+				curr := commandsList.GetCurrentItem()
+				if curr > 0 {
+					commandsList.SetCurrentItem(curr - 1)
+				}
+				return nil
+			}
 		}
 		return event
 	})
@@ -92,6 +107,6 @@ func main() {
 		SetBorder(true)
 
 	if err := app.SetRoot(pages, true).SetFocus(pages).Run(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

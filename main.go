@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/exec"
 	"text/template"
 
 	"github.com/gdamore/tcell/v2"
@@ -90,31 +93,103 @@ func (state *State) buildOutputContentWithoutInputs(cmd Command) {
 func (state *State) runCommand() {
 	state.outputPage.Clear()
 
-	content := tview.NewTextView().
-		SetWrap(true).
-		SetText(state.parsedCommand)
+	cmd := exec.Command("sh", "-c", state.parsedCommand)
+	cmd.Env = os.Environ()
+	for key, value := range state.config.Environment {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
+	}
 
-	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
-			state.pages.SwitchToPage("Commands")
-			return nil
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		state.displayText(fmt.Sprintf("Error creating stdout pipe: %v", err))
+		return
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		state.displayText(fmt.Sprintf("Error creating stderr pipe: %v", err))
+		return
+	}
+	reader := io.MultiReader(stdoutPipe, stderrPipe)
+
+	if err := cmd.Start(); err != nil {
+		state.displayText(fmt.Sprintf("Error starting command: %v", err))
+		return
+	}
+
+	textView := tview.NewTextView().
+		SetWrap(true).
+		SetDynamicColors(true)
+
+	textView.SetChangedFunc(func() {
+		state.app.Draw()
+	})
+
+	go func() {
+		scanner := bufio.NewScanner(reader)
+		for scanner.Scan() {
+			line := scanner.Text()
+			state.app.QueueUpdateDraw(func() {
+				fmt.Fprintln(textView, line)
+			})
+		}
+
+		if err := scanner.Err(); err != nil {
+			state.app.QueueUpdateDraw(func() {
+				fmt.Fprintln(textView, "\nError reading output: %v", err)
+			})
+		}
+
+		if err := cmd.Wait(); err != nil {
+			state.app.QueueUpdateDraw(func() {
+				fmt.Fprintln(textView, "\nCommand finished with error: %v", err)
+			})
+		}
+
+		state.app.QueueUpdateDraw(func() {
+			fmt.Fprintln(textView, "[green]done.")
+		})
+	}()
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune {
+			switch event.Rune() {
+			case 'q':
+				if cmd.Process != nil {
+					cmd.Process.Kill()
+				}
+				state.pages.SwitchToPage("Commands")
+				return nil
+			case 's':
+				if cmd.Process != nil {
+					cmd.Process.Kill()
+				}
+				fmt.Fprintln(textView, "")
+				fmt.Fprintln(textView, "[red]stopped.")
+				return nil
+			case 'r':
+				if cmd.Process != nil {
+					cmd.Process.Kill()
+				}
+				state.runCommand()
+				return nil
+			}
 		}
 		return event
 	})
 
-	state.outputPage.AddItem(content, 0, 1, true)
+	state.outputPage.AddItem(textView, 0, 1, true)
 	state.pages.SwitchToPage("Output")
-	state.app.SetFocus(content)
+	state.app.SetFocus(textView)
 }
 
 func (state *State) displayText(text string) {
 	state.outputPage.Clear()
 
-	content := tview.NewTextView().
+	textView := tview.NewTextView().
 		SetWrap(true).
 		SetText(text)
 
-	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
 			state.pages.SwitchToPage("Commands")
 			return nil
@@ -122,9 +197,9 @@ func (state *State) displayText(text string) {
 		return event
 	})
 
-	state.outputPage.AddItem(content, 0, 1, true)
+	state.outputPage.AddItem(textView, 0, 1, true)
 	state.pages.SwitchToPage("Output")
-	state.app.SetFocus(content)
+	state.app.SetFocus(textView)
 }
 
 func (state *State) buildCommandPage() {

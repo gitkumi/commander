@@ -1,7 +1,4 @@
 commands:
-  - title: Build
-    command: go build -o commander
-    description: Build this program
   - title: Echo DB
     command: echo DB_URL=${DB_URL}
     description: 

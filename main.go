@@ -30,11 +30,12 @@ type Command struct {
 }
 
 type State struct {
-	config       CommanderFile
-	app          *tview.Application
-	pages        *tview.Pages
-	outputPage   *tview.Flex
-	commandsPage *tview.Flex
+	config        CommanderFile
+	app           *tview.Application
+	pages         *tview.Pages
+	outputPage    *tview.Flex
+	commandsPage  *tview.Flex
+	parsedCommand string
 }
 
 func (state *State) buildOutputContent(cmd Command) {
@@ -62,17 +63,18 @@ func (state *State) buildOutputContentWithInputs(cmd Command) {
 	form.AddButton("Submit", func() {
 		tpl, err := template.New("command").Parse(cmd.Template)
 		if err != nil {
-			state.displayContent(fmt.Sprintf("Template parse error: %v", err))
+			state.displayText(fmt.Sprintf("Template parse error: %v", err))
 			return
 		}
 
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, formValues); err != nil {
-			state.displayContent(fmt.Sprintf("Template execution error: %v", err))
+			state.displayText(fmt.Sprintf("Template execution error: %v", err))
 			return
 		}
 
-		state.displayContent(buf.String())
+		state.parsedCommand = buf.String()
+		state.runCommand()
 	})
 
 	form.SetBorder(true).SetTitle("Input")
@@ -81,10 +83,31 @@ func (state *State) buildOutputContentWithInputs(cmd Command) {
 }
 
 func (state *State) buildOutputContentWithoutInputs(cmd Command) {
-	state.displayContent(cmd.Template)
+	state.parsedCommand = cmd.Template
+	state.runCommand()
 }
 
-func (state *State) displayContent(text string) {
+func (state *State) runCommand() {
+	state.outputPage.Clear()
+
+	content := tview.NewTextView().
+		SetWrap(true).
+		SetText(state.parsedCommand)
+
+	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
+			state.pages.SwitchToPage("Commands")
+			return nil
+		}
+		return event
+	})
+
+	state.outputPage.AddItem(content, 0, 1, true)
+	state.pages.SwitchToPage("Output")
+	state.app.SetFocus(content)
+}
+
+func (state *State) displayText(text string) {
 	state.outputPage.Clear()
 
 	content := tview.NewTextView().

@@ -29,26 +29,26 @@ type Command struct {
 	Inputs      []CommandInput `yaml:"inputs"`
 }
 
-type UI struct {
-	app          *tview.Application
+type State struct {
 	config       CommanderFile
+	app          *tview.Application
 	pages        *tview.Pages
 	outputPage   *tview.Flex
 	commandsPage *tview.Flex
 }
 
-func (ui *UI) buildOutputContent(cmd Command) {
-	ui.outputPage.Clear()
+func (state *State) buildOutputContent(cmd Command) {
+	state.outputPage.Clear()
 
 	if len(cmd.Inputs) > 0 {
-		ui.buildOutputContentWithInputs(cmd)
+		state.buildOutputContentWithInputs(cmd)
 		return
 	}
 
-	ui.buildOutputContentWithoutInputs(cmd)
+	state.buildOutputContentWithoutInputs(cmd)
 }
 
-func (ui *UI) buildOutputContentWithInputs(cmd Command) {
+func (state *State) buildOutputContentWithInputs(cmd Command) {
 	form := tview.NewForm()
 	formValues := make(map[string]string)
 
@@ -62,30 +62,30 @@ func (ui *UI) buildOutputContentWithInputs(cmd Command) {
 	form.AddButton("Submit", func() {
 		tpl, err := template.New("command").Parse(cmd.Template)
 		if err != nil {
-			ui.displayContent(fmt.Sprintf("Template parse error: %v", err))
+			state.displayContent(fmt.Sprintf("Template parse error: %v", err))
 			return
 		}
 
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, formValues); err != nil {
-			ui.displayContent(fmt.Sprintf("Template execution error: %v", err))
+			state.displayContent(fmt.Sprintf("Template execution error: %v", err))
 			return
 		}
 
-		ui.displayContent(buf.String())
+		state.displayContent(buf.String())
 	})
 
 	form.SetBorder(true).SetTitle("Input")
-	ui.outputPage.AddItem(form, 0, 1, true)
-	ui.pages.SwitchToPage("Output")
+	state.outputPage.AddItem(form, 0, 1, true)
+	state.pages.SwitchToPage("Output")
 }
 
-func (ui *UI) buildOutputContentWithoutInputs(cmd Command) {
-	ui.displayContent(cmd.Template)
+func (state *State) buildOutputContentWithoutInputs(cmd Command) {
+	state.displayContent(cmd.Template)
 }
 
-func (ui *UI) displayContent(text string) {
-	ui.outputPage.Clear()
+func (state *State) displayContent(text string) {
+	state.outputPage.Clear()
 
 	content := tview.NewTextView().
 		SetWrap(true).
@@ -93,24 +93,24 @@ func (ui *UI) displayContent(text string) {
 
 	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
-			ui.pages.SwitchToPage("Commands")
+			state.pages.SwitchToPage("Commands")
 			return nil
 		}
 		return event
 	})
 
-	ui.outputPage.AddItem(content, 0, 1, true)
-	ui.pages.SwitchToPage("Output")
-	ui.app.SetFocus(content)
+	state.outputPage.AddItem(content, 0, 1, true)
+	state.pages.SwitchToPage("Output")
+	state.app.SetFocus(content)
 }
 
-func (ui *UI) buildCommandPage() {
-	ui.commandsPage = tview.NewFlex().SetDirection(tview.FlexRow)
+func (state *State) buildCommandPage() {
+	state.commandsPage = tview.NewFlex().SetDirection(tview.FlexRow)
 
 	commandsList := tview.NewList()
-	for _, cmd := range ui.config.Commands {
+	for _, cmd := range state.config.Commands {
 		commandsList.AddItem(cmd.Title, "", 0, func() {
-			ui.buildOutputContent(cmd)
+			state.buildOutputContent(cmd)
 		})
 	}
 
@@ -118,7 +118,7 @@ func (ui *UI) buildCommandPage() {
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
 			case 'q':
-				ui.app.Stop()
+				state.app.Stop()
 				return nil
 
 			case 'j':
@@ -139,30 +139,30 @@ func (ui *UI) buildCommandPage() {
 		return event
 	})
 
-	ui.commandsPage.AddItem(commandsList, 0, 1, true)
-	ui.commandsPage.SetTitle(" Commands ").SetBorder(true)
+	state.commandsPage.AddItem(commandsList, 0, 1, true)
+	state.commandsPage.SetTitle(" Commands ").SetBorder(true)
 
-	ui.pages.AddPage("Commands", ui.commandsPage, true, true)
+	state.pages.AddPage("Commands", state.commandsPage, true, true)
 }
 
-func (ui *UI) buildOutputPage() {
-	ui.outputPage = tview.NewFlex().SetDirection(tview.FlexRow)
-	ui.outputPage.SetTitle(" Output ").SetBorder(true)
+func (state *State) buildOutputPage() {
+	state.outputPage = tview.NewFlex().SetDirection(tview.FlexRow)
+	state.outputPage.SetTitle(" Output ").SetBorder(true)
 
-	ui.pages.AddPage("Output", ui.outputPage, true, false)
+	state.pages.AddPage("Output", state.outputPage, true, false)
 }
 
-func buildUI(app *tview.Application, config CommanderFile) *UI {
-	ui := &UI{
-		app:    app,
+func initState(config CommanderFile) *State {
+	state := &State{
 		config: config,
+		app:    tview.NewApplication(),
 		pages:  tview.NewPages(),
 	}
 
-	ui.buildOutputPage()
-	ui.buildCommandPage()
+	state.buildOutputPage()
+	state.buildCommandPage()
 
-	return ui
+	return state
 }
 
 func main() {
@@ -171,10 +171,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app := tview.NewApplication()
-	ui := buildUI(app, config)
+	state := initState(config)
 
-	if err := app.SetRoot(ui.pages, true).SetFocus(ui.pages).Run(); err != nil {
+	if err := state.app.SetRoot(state.pages, true).SetFocus(state.pages).Run(); err != nil {
 		log.Fatal(err)
 	}
 }

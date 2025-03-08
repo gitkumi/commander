@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"log"
 	"os"
+	"text/template"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -37,9 +40,56 @@ type UI struct {
 func (ui *UI) buildOutputContent(cmd Command) {
 	ui.outputPage.Clear()
 
+	if len(cmd.Inputs) > 0 {
+		ui.buildOutputContentWithInputs(cmd)
+		return
+	}
+
+	ui.buildOutputContentWithoutInputs(cmd)
+}
+
+func (ui *UI) buildOutputContentWithInputs(cmd Command) {
+	form := tview.NewForm()
+	formValues := make(map[string]string)
+
+	for _, input := range cmd.Inputs {
+		formValues[input.Key] = input.DefaultValue
+		form.AddInputField(input.Key, input.DefaultValue, 40, nil, func(text string) {
+			formValues[input.Key] = text
+		})
+	}
+
+	form.AddButton("Submit", func() {
+		tpl, err := template.New("command").Parse(cmd.Template)
+		if err != nil {
+			ui.displayContent(fmt.Sprintf("Template parse error: %v", err))
+			return
+		}
+
+		var buf bytes.Buffer
+		if err := tpl.Execute(&buf, formValues); err != nil {
+			ui.displayContent(fmt.Sprintf("Template execution error: %v", err))
+			return
+		}
+
+		ui.displayContent(buf.String())
+	})
+
+	form.SetBorder(true).SetTitle("Input")
+	ui.outputPage.AddItem(form, 0, 1, true)
+	ui.pages.SwitchToPage("Output")
+}
+
+func (ui *UI) buildOutputContentWithoutInputs(cmd Command) {
+	ui.displayContent(cmd.Template)
+}
+
+func (ui *UI) displayContent(text string) {
+	ui.outputPage.Clear()
+
 	content := tview.NewTextView().
 		SetWrap(true).
-		SetText(cmd.Template)
+		SetText(text)
 
 	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyRune && event.Rune() == 'q' {
@@ -51,6 +101,7 @@ func (ui *UI) buildOutputContent(cmd Command) {
 
 	ui.outputPage.AddItem(content, 0, 1, true)
 	ui.pages.SwitchToPage("Output")
+	ui.app.SetFocus(content)
 }
 
 func (ui *UI) buildCommandPage() {

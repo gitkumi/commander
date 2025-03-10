@@ -32,6 +32,16 @@ type Command struct {
 	Inputs      []CommandInput `yaml:"inputs"`
 }
 
+type CommandStatus string
+
+const (
+	CommandPending CommandStatus = "pending"
+	CommandStopped CommandStatus = "stopped"
+	CommandRunning CommandStatus = "running"
+	CommandDone    CommandStatus = "done"
+	CommandError   CommandStatus = "error"
+)
+
 type State struct {
 	config        CommanderFile
 	app           *tview.Application
@@ -39,6 +49,7 @@ type State struct {
 	outputPage    *tview.Flex
 	commandsPage  *tview.Flex
 	parsedCommand string
+	commandStatus CommandStatus
 }
 
 func (state *State) buildOutputContent(cmd Command) {
@@ -92,6 +103,7 @@ func (state *State) buildOutputContentWithoutInputs(cmd Command) {
 
 func (state *State) runCommand() {
 	state.outputPage.Clear()
+	state.commandStatus = CommandRunning
 
 	cmd := exec.Command("sh", "-c", state.parsedCommand)
 	cmd.Env = os.Environ()
@@ -101,22 +113,26 @@ func (state *State) runCommand() {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		state.commandStatus = CommandError
 		state.displayText(fmt.Sprintf("Error creating stdout pipe: %v", err))
 		return
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
+		state.commandStatus = CommandError
 		state.displayText(fmt.Sprintf("Error creating stderr pipe: %v", err))
 		return
 	}
 	reader := io.MultiReader(stdoutPipe, stderrPipe)
 
 	if err := cmd.Start(); err != nil {
+		state.commandStatus = CommandError
 		state.displayText(fmt.Sprintf("Error starting command: %v", err))
 		return
 	}
 
 	textView := tview.NewTextView().
+		SetText(state.parsedCommand + "\n\n").
 		SetWrap(true).
 		SetDynamicColors(true)
 
@@ -134,17 +150,24 @@ func (state *State) runCommand() {
 		}
 
 		if err := scanner.Err(); err != nil {
+			state.commandStatus = CommandError
 			state.app.QueueUpdateDraw(func() {
-				fmt.Fprintln(textView, "\nError reading output: %v", err)
+				fmt.Fprintln(textView, err)
 			})
 		}
 
 		if err := cmd.Wait(); err != nil {
+			state.commandStatus = CommandError
 			state.app.QueueUpdateDraw(func() {
-				fmt.Fprintln(textView, "\nCommand finished with error: %v", err)
+				fmt.Fprintln(textView, err)
 			})
 		}
 
+		if state.commandStatus == CommandStopped || state.commandStatus == CommandError {
+			return
+		}
+
+		state.commandStatus = CommandDone
 		state.app.QueueUpdateDraw(func() {
 			fmt.Fprintln(textView, "[green]done.")
 		})
@@ -154,16 +177,23 @@ func (state *State) runCommand() {
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
 			case 'q':
+				state.commandStatus = CommandPending
 				if cmd.Process != nil {
 					cmd.Process.Kill()
 				}
+
 				state.pages.SwitchToPage("Commands")
 				return nil
 			case 's':
+				if state.commandStatus != CommandRunning {
+					return nil
+				}
+
+				state.commandStatus = CommandStopped
 				if cmd.Process != nil {
 					cmd.Process.Kill()
 				}
-				fmt.Fprintln(textView, "")
+
 				fmt.Fprintln(textView, "[red]stopped.")
 				return nil
 			case 'r':
@@ -252,9 +282,10 @@ func (state *State) buildOutputPage() {
 
 func initState(config CommanderFile) *State {
 	state := &State{
-		config: config,
-		app:    tview.NewApplication(),
-		pages:  tview.NewPages(),
+		config:        config,
+		app:           tview.NewApplication(),
+		pages:         tview.NewPages(),
+		commandStatus: CommandPending,
 	}
 
 	state.buildOutputPage()

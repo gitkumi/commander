@@ -48,7 +48,7 @@ type State struct {
 	pages         *tview.Pages
 	outputPage    *tview.Flex
 	commandsPage  *tview.Flex
-	parsedCommand string
+	inputPage     *tview.Flex
 	commandStatus CommandStatus
 }
 
@@ -56,14 +56,14 @@ func (state *State) buildOutputContent(cmd Command) {
 	state.outputPage.Clear()
 
 	if len(cmd.Inputs) > 0 {
-		state.buildOutputContentWithInputs(cmd)
+		state.buildInputPageContent(cmd)
 		return
 	}
 
-	state.buildOutputContentWithoutInputs(cmd)
+	state.runCommand(cmd.Template)
 }
 
-func (state *State) buildOutputContentWithInputs(cmd Command) {
+func (state *State) buildInputPageContent(cmd Command) {
 	form := tview.NewForm()
 	formValues := make(map[string]string)
 
@@ -87,25 +87,19 @@ func (state *State) buildOutputContentWithInputs(cmd Command) {
 			return
 		}
 
-		state.parsedCommand = buf.String()
-		state.runCommand()
+		state.runCommand(buf.String())
 	})
 
-	form.SetBorder(true).SetTitle("Input")
-	state.outputPage.AddItem(form, 0, 1, true)
-	state.pages.SwitchToPage("Output")
+	state.inputPage.AddItem(form, 0, 1, true)
+	state.pages.SwitchToPage("Input")
+	state.app.SetFocus(form)
 }
 
-func (state *State) buildOutputContentWithoutInputs(cmd Command) {
-	state.parsedCommand = cmd.Template
-	state.runCommand()
-}
-
-func (state *State) runCommand() {
+func (state *State) runCommand(parsedCommand string) {
 	state.outputPage.Clear()
 	state.commandStatus = CommandRunning
 
-	cmd := exec.Command("sh", "-c", state.parsedCommand)
+	cmd := exec.Command("sh", "-c", parsedCommand)
 	cmd.Env = os.Environ()
 	for key, value := range state.config.Environment {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
@@ -132,7 +126,7 @@ func (state *State) runCommand() {
 	}
 
 	textView := tview.NewTextView().
-		SetText(state.parsedCommand + "\n\n").
+		SetText(parsedCommand + "\n\n").
 		SetWrap(true).
 		SetDynamicColors(true)
 
@@ -200,7 +194,7 @@ func (state *State) runCommand() {
 				if cmd.Process != nil {
 					cmd.Process.Kill()
 				}
-				state.runCommand()
+				state.runCommand(parsedCommand)
 				return nil
 			}
 		}
@@ -232,7 +226,7 @@ func (state *State) displayText(text string) {
 	state.app.SetFocus(textView)
 }
 
-func (state *State) buildCommandPage() {
+func (state *State) initCommandPage() {
 	state.commandsPage = tview.NewFlex().SetDirection(tview.FlexRow)
 
 	commandsList := tview.NewList()
@@ -273,11 +267,18 @@ func (state *State) buildCommandPage() {
 	state.pages.AddPage("Commands", state.commandsPage, true, true)
 }
 
-func (state *State) buildOutputPage() {
+func (state *State) initOutputPage() {
 	state.outputPage = tview.NewFlex().SetDirection(tview.FlexRow)
 	state.outputPage.SetTitle(" Output ").SetBorder(true)
 
 	state.pages.AddPage("Output", state.outputPage, true, false)
+}
+
+func (state *State) initInputPage() {
+	state.inputPage = tview.NewFlex().SetDirection(tview.FlexRow)
+	state.inputPage.SetTitle(" Input ").SetBorder(true)
+
+	state.pages.AddPage("Input", state.inputPage, true, false)
 }
 
 func initState(config CommanderFile) *State {
@@ -288,8 +289,9 @@ func initState(config CommanderFile) *State {
 		commandStatus: CommandPending,
 	}
 
-	state.buildOutputPage()
-	state.buildCommandPage()
+	state.initOutputPage()
+	state.initCommandPage()
+	state.initInputPage()
 
 	return state
 }

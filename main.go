@@ -23,7 +23,7 @@ type CommanderFile struct {
 type CommandInput struct {
 	Key          string   `yaml:"key"`
 	DefaultValue string   `yaml:"defaultValue"`
-	choices      []string `yaml:choices`
+	Choices      []string `yaml:"choices"`
 }
 
 type Command struct {
@@ -70,6 +70,13 @@ func (state *State) buildInputPageContent(cmd Command) {
 
 	for _, input := range cmd.Inputs {
 		formValues[input.Key] = input.DefaultValue
+
+		if len(input.Choices) > 0 {
+			dropdown := createDropdown(formValues, input)
+			form.AddFormItem(dropdown)
+			continue
+		}
+
 		form.AddInputField(input.Key, input.DefaultValue, 40, nil, func(text string) {
 			formValues[input.Key] = text
 		})
@@ -323,4 +330,42 @@ func loadConfig(filePath string) (CommanderFile, error) {
 	}
 
 	return commanderFile, nil
+}
+
+func createDropdown(formValues map[string]string, input CommandInput) *tview.DropDown {
+	dropdown := tview.NewDropDown().SetLabel(input.Key + ": ")
+	dropdown.SetOptions(input.Choices, func(option string, index int) {
+		formValues[input.Key] = option
+	})
+
+	dropdown.SetCurrentOption(0)
+	formValues[input.Key] = input.Choices[0]
+
+	dropdown.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune {
+			switch event.Rune() {
+			case 'j':
+				currentIndex, _ := dropdown.GetCurrentOption()
+				newIndex := currentIndex + 1
+				if newIndex >= len(input.Choices) {
+					newIndex = 0
+				}
+				dropdown.SetCurrentOption(newIndex)
+				formValues[input.Key] = input.Choices[newIndex]
+				return nil
+			case 'k':
+				currentIndex, _ := dropdown.GetCurrentOption()
+				newIndex := currentIndex - 1
+				if newIndex < 0 {
+					newIndex = len(input.Choices) - 1
+				}
+				dropdown.SetCurrentOption(newIndex)
+				formValues[input.Key] = input.Choices[newIndex]
+				return nil
+			}
+		}
+		return event
+	})
+
+	return dropdown
 }

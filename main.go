@@ -21,8 +21,9 @@ type CommanderFile struct {
 }
 
 type CommandInput struct {
-	Key          string `yaml:"key"`
-	DefaultValue string `yaml:"defaultValue"`
+	Key          string   `yaml:"key"`
+	DefaultValue string   `yaml:"defaultValue"`
+	choices      []string `yaml:choices`
 }
 
 type Command struct {

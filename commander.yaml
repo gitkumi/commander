@@ -26,6 +26,16 @@ commands:
   - title: Deploy
     command: go build -o commander && mv commander ~/config/scripts
     description: Deploy this program
+  - title: Dropdown
+    command: echo "{{.Selected}}"
+    description: Dropdown
+    inputs:
+      - key: Selected
+        defaultValue: One
+        choices: 
+          - One
+          - Two
+          - Three
 
 environment:
   DB_URL: ./test.db

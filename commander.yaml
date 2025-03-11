@@ -31,11 +31,15 @@ commands:
     description: Dropdown
     inputs:
       - key: Selected
-        defaultValue: One
         choices: 
           - One
           - Two
           - Three
+  - title: Environment
+    command: echo $ENV
+    description: Environment per command
+    environment:
+        ENV: "Hola"
 
 environment:
   DB_URL: ./test.db

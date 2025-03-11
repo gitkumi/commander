@@ -27,10 +27,11 @@ type CommandInput struct {
 }
 
 type Command struct {
-	Title       string         `yaml:"title"`
-	Template    string         `yaml:"command"`
-	Description string         `yaml:"description"`
-	Inputs      []CommandInput `yaml:"inputs"`
+	Title       string            `yaml:"title"`
+	Template    string            `yaml:"command"`
+	Description string            `yaml:"description"`
+	Inputs      []CommandInput    `yaml:"inputs"`
+	Environment map[string]string `yaml:"environment"`
 }
 
 type CommandStatus string
@@ -61,10 +62,12 @@ func (state *State) buildOutputContent(cmd Command) {
 		return
 	}
 
-	state.runCommand(cmd.Template)
+	state.runCommand(cmd.Template, cmd.Environment)
 }
 
 func (state *State) buildInputPageContent(cmd Command) {
+	state.inputPage.Clear()
+
 	form := tview.NewForm()
 	formValues := make(map[string]string)
 
@@ -77,7 +80,7 @@ func (state *State) buildInputPageContent(cmd Command) {
 			continue
 		}
 
-		form.AddInputField(input.Key, input.DefaultValue, 40, nil, func(text string) {
+		form.AddInputField(input.Key, input.DefaultValue, 30, nil, func(text string) {
 			formValues[input.Key] = text
 		})
 	}
@@ -95,7 +98,7 @@ func (state *State) buildInputPageContent(cmd Command) {
 			return
 		}
 
-		state.runCommand(buf.String())
+		state.runCommand(buf.String(), cmd.Environment)
 	})
 
 	state.inputPage.AddItem(form, 0, 1, true)
@@ -103,13 +106,17 @@ func (state *State) buildInputPageContent(cmd Command) {
 	state.app.SetFocus(form)
 }
 
-func (state *State) runCommand(parsedCommand string) {
+func (state *State) runCommand(parsedCommand string, commandEnv map[string]string) {
 	state.outputPage.Clear()
 	state.commandStatus = CommandRunning
 
 	cmd := exec.Command("sh", "-c", parsedCommand)
 	cmd.Env = os.Environ()
 	for key, value := range state.config.Environment {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	for key, value := range commandEnv {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
@@ -202,7 +209,7 @@ func (state *State) runCommand(parsedCommand string) {
 				if cmd.Process != nil {
 					cmd.Process.Kill()
 				}
-				state.runCommand(parsedCommand)
+				state.runCommand(parsedCommand, commandEnv)
 				return nil
 			}
 		}
@@ -333,13 +340,16 @@ func loadConfig(filePath string) (CommanderFile, error) {
 }
 
 func createDropdown(formValues map[string]string, input CommandInput) *tview.DropDown {
-	dropdown := tview.NewDropDown().SetLabel(input.Key + ": ")
-	dropdown.SetOptions(input.Choices, func(option string, index int) {
-		formValues[input.Key] = option
-	})
+	dropdown := tview.NewDropDown().
+		SetLabel(input.Key + ": ").
+		SetFieldWidth(30)
 
 	dropdown.SetCurrentOption(0)
 	formValues[input.Key] = input.Choices[0]
+
+	dropdown.SetOptions(input.Choices, func(option string, index int) {
+		formValues[input.Key] = option
+	})
 
 	dropdown.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyRune {

@@ -40,6 +40,21 @@ func loadConfig(filePath string) (CommanderFile, error) {
 	return commanderFile, nil
 }
 
+func detectPackageManager() string {
+	lockFiles := map[string]string{
+		"pnpm-lock.yaml": "pnpm",
+		"yarn.lock":      "yarn",
+		"bun.lockb":      "bun",
+		"bun.lock":       "bun",
+	}
+	for file, manager := range lockFiles {
+		if _, err := os.Stat(file); err == nil {
+			return manager
+		}
+	}
+	return "npm"
+}
+
 func loadPackageJSON(filePath string) (CommanderFile, error) {
 	file, err := os.ReadFile(filePath)
 	if err != nil {
@@ -53,12 +68,15 @@ func loadPackageJSON(filePath string) (CommanderFile, error) {
 		return CommanderFile{}, err
 	}
 
+	pm := detectPackageManager()
+
 	var commands []Command
 	for name, script := range pkg.Scripts {
 		commands = append(commands, Command{
 			Title:    name,
-			Template: script,
+			Template: pm + " run " + name,
 		})
+		_ = script
 	}
 
 	return CommanderFile{Commands: commands}, nil

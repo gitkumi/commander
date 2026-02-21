@@ -1,18 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 )
 
 func main() {
-	configPath := defaultConfigPath()
-	if len(os.Args) > 1 {
-		configPath = os.Args[1]
-	}
-
-	config, err := loadConfig(configPath)
+	config, err := resolveConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -24,20 +20,26 @@ func main() {
 	}
 }
 
-func defaultConfigPath() string {
-	// Prefer ./commander.yaml if it exists in the current directory
-	if _, err := os.Stat("./commander.yaml"); err == nil {
-		return "./commander.yaml"
+func resolveConfig() (CommanderFile, error) {
+	if len(os.Args) > 1 {
+		return loadConfig(os.Args[1])
 	}
 
-	// Fall back to XDG config directory
+	if _, err := os.Stat("./commander.yaml"); err == nil {
+		return loadConfig("./commander.yaml")
+	}
+
+	if _, err := os.Stat("./package.json"); err == nil {
+		return loadPackageJSON("./package.json")
+	}
+
 	configDir := os.Getenv("XDG_CONFIG_HOME")
 	if configDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "./commander.yaml"
+			return CommanderFile{}, fmt.Errorf("no config found")
 		}
 		configDir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(configDir, "commander", "commander.yaml")
+	return loadConfig(filepath.Join(configDir, "commander", "commander.yaml"))
 }

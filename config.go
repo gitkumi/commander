@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -38,4 +39,28 @@ func loadConfig(filePath string) (CommanderFile, error) {
 	}
 
 	return commanderFile, nil
+}
+
+func loadPackageJSON(filePath string) (CommanderFile, error) {
+	file, err := os.ReadFile(filePath)
+	if err != nil {
+		return CommanderFile{}, err
+	}
+
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(file, &pkg); err != nil {
+		return CommanderFile{}, err
+	}
+
+	var commands []Command
+	for name, script := range pkg.Scripts {
+		commands = append(commands, Command{
+			Title:    name,
+			Template: script,
+		})
+	}
+
+	return CommanderFile{Commands: commands}, nil
 }

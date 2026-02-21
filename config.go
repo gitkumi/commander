@@ -19,10 +19,9 @@ type CommandInput struct {
 }
 
 type Command struct {
-	Title       string            `yaml:"title"`
-	Template    string            `yaml:"command"`
-	Description string            `yaml:"description"`
-	Inputs      []CommandInput    `yaml:"inputs"`
+	Title    string            `yaml:"title"`
+	Template string            `yaml:"command"`
+	Inputs   []CommandInput    `yaml:"inputs"`
 	Environment map[string]string `yaml:"environment"`
 }
 

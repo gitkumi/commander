@@ -148,7 +148,7 @@ func (state *State) initCommandPage() {
 	commandsList.SetSelectedTextColor(tcell.ColorWhite)
 	commandsList.SetSecondaryTextColor(tcell.ColorGray)
 	for _, cmd := range state.config.Commands {
-		commandsList.AddItem(cmd.Title, cmd.Description, 0, func() {
+		commandsList.AddItem(cmd.Title, cmd.Template, 0, func() {
 			state.handleCommandSelection(cmd)
 		})
 	}

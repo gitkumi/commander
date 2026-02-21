@@ -1,14 +1,11 @@
 commands:
   - title: Echo DB
     command: echo DB_URL=${DB_URL}
-    description: Echo DB
   - title: Ping
     command: ping -c 4 google.com
-    description: Ping
   - title: Parameter
     command: echo "{{.One}}-{{.Two}}-{{.Three}}"
-    description: Echo given text
-    inputs: 
+    inputs:
       - key: One
         defaultValue: One
       - key: Two
@@ -17,28 +14,22 @@ commands:
         defaultValue: Three
   - title: ls -la
     command: ls -la
-    description: List files
   - title: Print working directory
     command: pwd
-    description: Print working directory
   - title: Check disk usage
     command: df -h
-    description: Check disk usage
   - title: Deploy
     command: go build -o commander && mv commander ~/config/scripts
-    description: Deploy this program
   - title: Dropdown
     command: echo "{{.Selected}}"
-    description: Dropdown
     inputs:
       - key: Selected
-        choices: 
+        choices:
           - One
           - Two
           - Three
   - title: Environment
     command: echo $ENV
-    description: Environment per command
     environment:
         ENV: "Hola"
 

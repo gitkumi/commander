@@ -154,12 +154,12 @@ func (state *State) initCommandPage() {
 	}
 
 	commandsList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			state.app.Stop()
+			return nil
+		}
 		if event.Key() == tcell.KeyRune {
 			switch event.Rune() {
-			case 'q':
-				state.app.Stop()
-				return nil
-
 			case 'j':
 				curr := commandsList.GetCurrentItem()
 				if curr < commandsList.GetItemCount()-1 {
@@ -183,7 +183,7 @@ func (state *State) initCommandPage() {
 		AddItem(commandsList, 0, 1, true).
 		AddItem(nil, 1, 0, false)
 	state.commandsPage.AddItem(listWrapper, 0, 1, true)
-	state.commandsPage.AddItem(createKeybindBar(" [yellow]j/k[white] navigate  [yellow]Enter[white] select  [yellow]q[white] quit"), 1, 0, false)
+	state.commandsPage.AddItem(createKeybindBar(" [yellow]j/k[white] navigate  [yellow]Enter[white] select  [yellow]Esc[white] quit"), 1, 0, false)
 	state.commandsPage.SetTitle(" Commands ").SetBorder(true)
 
 	state.pages.AddPage("Commands", state.commandsPage, true, true)

@@ -18,8 +18,6 @@ commands:
     command: pwd
   - title: Check disk usage
     command: df -h
-  - title: Deploy
-    command: go build -o commander && mv commander ~/config/scripts
   - title: Dropdown
     command: echo "{{.Selected}}"
     inputs:
@@ -32,6 +30,10 @@ commands:
     command: echo $ENV
     environment:
         ENV: "Hola"
+  - title: Git Tag
+    command: git tag {{.Tag}} && git push origin {{.Tag}}
+    inputs:
+      - key: Tag
 
 environment:
   DB_URL: ./test.db

@@ -1,5 +1,3 @@
 # commander
 
-## TODOS
-
-- show keybinding
+Simple command runner.

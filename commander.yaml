@@ -1,9 +1,10 @@
 commands:
   - title: Echo DB
     command: echo DB_URL=${DB_URL}
-    description: 
+    description: Echo DB
   - title: Ping
     command: ping -c 4 google.com
+    description: Ping
   - title: Parameter
     command: echo "{{.One}}-{{.Two}}-{{.Three}}"
     description: Echo given text

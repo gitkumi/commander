@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -80,4 +82,39 @@ func loadPackageJSON(filePath string) (CommanderFile, error) {
 	}
 
 	return CommanderFile{Commands: commands}, nil
+}
+
+func loadMakefile(filePath string) (CommanderFile, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return CommanderFile{}, err
+	}
+	defer file.Close()
+
+	var commands []Command
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Match target lines like "build:" or "test: deps"
+		// Skip lines starting with tab/space (recipes) and variables
+		if strings.HasPrefix(line, "\t") || strings.HasPrefix(line, " ") || strings.HasPrefix(line, ".") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if idx := strings.IndexByte(line, ':'); idx > 0 {
+			// Skip variable assignments (`:=`, `::=`)
+			if idx+1 < len(line) && line[idx+1] == '=' {
+				continue
+			}
+			target := strings.TrimSpace(line[:idx])
+			if target == "" || strings.ContainsAny(target, " $%") {
+				continue
+			}
+			commands = append(commands, Command{
+				Title:    target,
+				Template: "make " + target,
+			})
+		}
+	}
+
+	return CommanderFile{Commands: commands}, scanner.Err()
 }

@@ -25,21 +25,37 @@ func resolveConfig() (CommanderFile, error) {
 		return loadConfig(os.Args[1])
 	}
 
-	if _, err := os.Stat("./commander.yaml"); err == nil {
-		return loadConfig("./commander.yaml")
+	home, _ := os.UserHomeDir()
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return CommanderFile{}, err
 	}
 
-	if _, err := os.Stat("./package.json"); err == nil {
-		return loadPackageJSON("./package.json")
-	}
-
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return CommanderFile{}, fmt.Errorf("no config found")
+	for {
+		type candidate struct {
+			file string
+			load func(string) (CommanderFile, error)
 		}
-		configDir = filepath.Join(home, ".config")
+		candidates := []candidate{
+			{"commander.yaml", loadConfig},
+			{"package.json", loadPackageJSON},
+			{"Makefile", loadMakefile},
+		}
+
+		for _, c := range candidates {
+			path := filepath.Join(dir, c.file)
+			if _, err := os.Stat(path); err == nil {
+				return c.load(path)
+			}
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir || dir == home {
+			break
+		}
+		dir = parent
 	}
-	return loadConfig(filepath.Join(configDir, "commander", "commander.yaml"))
+
+	return CommanderFile{}, fmt.Errorf("no config found (searched up to %s)", home)
 }

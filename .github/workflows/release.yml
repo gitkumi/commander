@@ -21,3 +21,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish to Go proxy
+        env:
+          GOPROXY: https://proxy.golang.org
+        run: go list -m github.com/gitkumi/commander@${GITHUB_REF_NAME}

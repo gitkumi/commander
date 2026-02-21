@@ -133,10 +133,13 @@ func (state *State) runCommand(parsedCommand string, commandEnv map[string]strin
 
 		cmd.Run()
 
-		fmt.Print("\n\033[2m(press any key)\033[0m")
-		waitForKey()
+		fmt.Print("\n\033[2m(Esc to quit, Enter to continue)\033[0m")
+		key := waitForKey()
 		fmt.Println()
 		fmt.Println()
+		if key == 27 {
+			state.app.Stop()
+		}
 	})
 }
 
@@ -192,10 +195,13 @@ func (state *State) initCommandPage() {
 func (state *State) suspendWithMessage(msg string) {
 	state.app.Suspend(func() {
 		fmt.Printf("\033[31m%s\033[0m\n", msg)
-		fmt.Print("\n\033[2m(press any key)\033[0m")
-		waitForKey()
+		fmt.Print("\n\033[2m(Esc to quit, Enter to continue)\033[0m")
+		key := waitForKey()
 		fmt.Println()
 		fmt.Println()
+		if key == 27 {
+			state.app.Stop()
+		}
 	})
 }
 
@@ -257,14 +263,15 @@ func createDropdown(formValues map[string]string, input CommandInput) *tview.Dro
 	return dropdown
 }
 
-func waitForKey() {
+func waitForKey() byte {
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		fmt.Scanln()
-		return
+		return 0
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
 	buf := make([]byte, 1)
 	os.Stdin.Read(buf)
+	return buf[0]
 }

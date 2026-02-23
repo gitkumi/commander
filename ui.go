@@ -23,8 +23,8 @@ type State struct {
 
 func initState(config CommanderFile) *State {
 	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDefault
-	tview.Styles.ContrastBackgroundColor = tcell.ColorDarkGray
-	tview.Styles.MoreContrastBackgroundColor = tcell.ColorDarkGray
+	tview.Styles.ContrastBackgroundColor = tcell.ColorGreen
+	tview.Styles.MoreContrastBackgroundColor = tcell.ColorGreen
 	tview.Styles.BorderColor = tcell.ColorDefault
 	tview.Styles.TitleColor = tcell.ColorDefault
 	tview.Styles.GraphicsColor = tcell.ColorDefault
@@ -58,27 +58,80 @@ func (state *State) handleCommandSelection(cmd Command) {
 func (state *State) buildInputPageContent(cmd Command) {
 	state.inputPage.Clear()
 
-	form := tview.NewForm()
-	form.SetFieldBackgroundColor(tcell.ColorDarkGray)
-	form.SetFieldTextColor(tcell.ColorBlack)
-	form.SetButtonTextColor(tcell.ColorBlack)
 	formValues := make(map[string]string)
+	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	var fields []tview.Primitive
 
-	for _, input := range cmd.Inputs {
+	cmdLabel := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText("[yellow]" + cmd.Template + "[-]")
+	cmdLabel.SetBackgroundColor(tcell.ColorDefault)
+	container.AddItem(cmdLabel, 1, 0, false)
+	container.AddItem(nil, 1, 0, false)
+
+	for i, input := range cmd.Inputs {
 		formValues[input.Key] = input.DefaultValue
+		key := input.Key
+
+		if i > 0 {
+			container.AddItem(nil, 1, 0, false)
+		}
+
+		label := tview.NewTextView().
+			SetDynamicColors(true).
+			SetText("[gray]" + key + "[-]")
+		label.SetBackgroundColor(tcell.ColorDefault)
+		container.AddItem(label, 1, 0, false)
 
 		if len(input.Choices) > 0 {
 			dropdown := createDropdown(formValues, input)
-			form.AddFormItem(dropdown)
-			continue
+			dropdown.SetFieldBackgroundColor(tcell.ColorDefault)
+			dropdown.SetFocusFunc(func() {
+				dropdown.SetFieldBackgroundColor(tcell.ColorGreen)
+				dropdown.SetFieldTextColor(tcell.ColorWhite)
+			})
+			dropdown.SetBlurFunc(func() {
+				dropdown.SetFieldBackgroundColor(tcell.ColorDefault)
+				dropdown.SetFieldTextColor(tcell.ColorWhite)
+			})
+			container.AddItem(dropdown, 1, 0, true)
+			fields = append(fields, dropdown)
+		} else {
+			field := tview.NewInputField().
+				SetLabel("> ").
+				SetText(input.DefaultValue).
+				SetFieldWidth(30).
+				SetFieldBackgroundColor(tcell.ColorDefault).
+				SetFieldTextColor(tcell.ColorWhite)
+			field.SetChangedFunc(func(text string) {
+				formValues[key] = text
+			})
+			field.SetFocusFunc(func() {
+				field.SetFieldBackgroundColor(tcell.ColorGreen)
+			})
+			field.SetBlurFunc(func() {
+				field.SetFieldBackgroundColor(tcell.ColorDefault)
+			})
+			container.AddItem(field, 1, 0, true)
+			fields = append(fields, field)
 		}
-
-		form.AddInputField(input.Key, input.DefaultValue, 30, nil, func(text string) {
-			formValues[input.Key] = text
-		})
 	}
 
-	form.AddButton("Submit", func() {
+	container.AddItem(nil, 1, 0, false)
+
+	submitBtn := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText("[ Submit ]")
+	submitBtn.SetBackgroundColor(tcell.ColorDefault)
+	submitBtnRow := tview.NewFlex().
+		AddItem(submitBtn, 10, 0, true).
+		AddItem(nil, 0, 1, false)
+	container.AddItem(submitBtnRow, 1, 0, true)
+	fields = append(fields, submitBtn)
+
+	container.AddItem(nil, 0, 1, false)
+
+	submit := func() {
 		tpl, err := template.New("command").Parse(cmd.Template)
 		if err != nil {
 			state.suspendWithMessage(fmt.Sprintf("Template parse error: %v", err))
@@ -92,27 +145,111 @@ func (state *State) buildInputPageContent(cmd Command) {
 		}
 
 		state.runCommand(buf.String(), cmd.Environment)
-	})
+	}
 
-	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
+	focusField := func(index int) {
+		if index >= 0 && index < len(fields) {
+			state.app.SetFocus(fields[index])
+		}
+	}
+
+	keybindBar := createKeybindBar("")
+
+	submitBtn.SetFocusFunc(func() {
+		submitBtn.SetBackgroundColor(tcell.ColorGreen)
+		submitBtn.SetTextColor(tcell.ColorWhite)
+		keybindBar.SetText(" [yellow]Tab/S-Tab[white] next/prev  [yellow]Enter[white] submit  [yellow]Esc[white] back")
+	})
+	submitBtn.SetBlurFunc(func() {
+		submitBtn.SetBackgroundColor(tcell.ColorDefault)
+		submitBtn.SetTextColor(tcell.ColorDefault)
+		keybindBar.SetText(" [yellow]Tab/S-Tab[white] next/prev  [yellow]Esc[white] back")
+	})
+	submitBtn.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEsc:
 			state.pages.SwitchToPage("Commands")
 			return nil
-		}
-		if event.Key() == tcell.KeyBacktab {
-			index, _ := form.GetFocusedItemIndex()
-			if index > 0 {
-				form.SetFocus(index - 1)
-			}
+		case tcell.KeyEnter:
+			submit()
+			return nil
+		case tcell.KeyTab:
+			focusField(0)
+			return nil
+		case tcell.KeyBacktab:
+			focusField(len(fields) - 2)
 			return nil
 		}
 		return event
 	})
 
-	state.inputPage.AddItem(form, 0, 1, true)
-	state.inputPage.AddItem(createKeybindBar(" [yellow]Tab/S-Tab[white] next/prev  [yellow]Enter[white] submit  [yellow]Esc[white] back"), 1, 0, false)
+	for i, f := range fields {
+		idx := i
+		switch field := f.(type) {
+		case *tview.InputField:
+			field.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+				switch event.Key() {
+				case tcell.KeyEsc:
+					state.pages.SwitchToPage("Commands")
+					return nil
+				case tcell.KeyTab:
+					focusField(idx + 1)
+					return nil
+				case tcell.KeyBacktab:
+					focusField(idx - 1)
+					return nil
+				}
+				return event
+			})
+		case *tview.DropDown:
+			choices := cmd.Inputs[idx].Choices
+			field.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+				switch event.Key() {
+				case tcell.KeyEsc:
+					state.pages.SwitchToPage("Commands")
+					return nil
+				case tcell.KeyTab:
+					focusField(idx + 1)
+					return nil
+				case tcell.KeyBacktab:
+					focusField(idx - 1)
+					return nil
+				}
+				if event.Key() == tcell.KeyRune {
+					switch event.Rune() {
+					case 'j':
+						cur, _ := field.GetCurrentOption()
+						next := (cur + 1) % len(choices)
+						field.SetCurrentOption(next)
+						formValues[cmd.Inputs[idx].Key] = choices[next]
+						return nil
+					case 'k':
+						cur, _ := field.GetCurrentOption()
+						next := cur - 1
+						if next < 0 {
+							next = len(choices) - 1
+						}
+						field.SetCurrentOption(next)
+						formValues[cmd.Inputs[idx].Key] = choices[next]
+						return nil
+					}
+				}
+				return event
+			})
+		}
+	}
+
+	wrapper := tview.NewFlex().
+		AddItem(nil, 1, 0, false).
+		AddItem(container, 0, 1, true).
+		AddItem(nil, 1, 0, false)
+	keybindBar.SetText(" [yellow]Tab/S-Tab[white] next/prev  [yellow]Esc[white] back")
+	state.inputPage.AddItem(wrapper, 0, 1, true)
+	state.inputPage.AddItem(keybindBar, 1, 0, false)
 	state.pages.SwitchToPage("Input")
-	state.app.SetFocus(form)
+	if len(fields) > 0 {
+		state.app.SetFocus(fields[0])
+	}
 }
 
 func (state *State) runCommand(parsedCommand string, commandEnv map[string]string) {
@@ -147,7 +284,7 @@ func (state *State) initCommandPage() {
 	state.commandsPage = tview.NewFlex().SetDirection(tview.FlexRow)
 
 	commandsList := tview.NewList()
-	commandsList.SetSelectedBackgroundColor(tcell.ColorDarkGray)
+	commandsList.SetSelectedBackgroundColor(tcell.ColorGreen)
 	commandsList.SetSelectedTextColor(tcell.ColorWhite)
 	commandsList.SetSecondaryTextColor(tcell.ColorGray)
 	for _, cmd := range state.config.Commands {
@@ -221,43 +358,27 @@ func createKeybindBar(bindings string) *tview.TextView {
 }
 
 func createDropdown(formValues map[string]string, input CommandInput) *tview.DropDown {
+	maxLen := len("[ Select ]")
+	for _, c := range input.Choices {
+		if w := len(c) + 4; w > maxLen {
+			maxLen = w
+		}
+	}
+
 	dropdown := tview.NewDropDown().
-		SetLabel(input.Key + ": ").
-		SetFieldWidth(30).
-		SetFieldBackgroundColor(tcell.ColorDarkGray).
-		SetFieldTextColor(tcell.ColorBlack)
+		SetFieldWidth(maxLen).
+		SetFieldTextColor(tcell.ColorWhite).
+		SetTextOptions("  ", "", "  ", "", "[ Select ]").
+		SetListStyles(
+			tcell.StyleDefault.Background(tcell.ColorDefault).Foreground(tcell.ColorWhite),
+			tcell.StyleDefault.Background(tcell.ColorGreen).Foreground(tcell.ColorWhite),
+		)
 
 	dropdown.SetCurrentOption(0)
 	formValues[input.Key] = input.Choices[0]
 
 	dropdown.SetOptions(input.Choices, func(option string, index int) {
 		formValues[input.Key] = option
-	})
-
-	dropdown.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyRune {
-			switch event.Rune() {
-			case 'j':
-				currentIndex, _ := dropdown.GetCurrentOption()
-				newIndex := currentIndex + 1
-				if newIndex >= len(input.Choices) {
-					newIndex = 0
-				}
-				dropdown.SetCurrentOption(newIndex)
-				formValues[input.Key] = input.Choices[newIndex]
-				return nil
-			case 'k':
-				currentIndex, _ := dropdown.GetCurrentOption()
-				newIndex := currentIndex - 1
-				if newIndex < 0 {
-					newIndex = len(input.Choices) - 1
-				}
-				dropdown.SetCurrentOption(newIndex)
-				formValues[input.Key] = input.Choices[newIndex]
-				return nil
-			}
-		}
-		return event
 	})
 
 	return dropdown
